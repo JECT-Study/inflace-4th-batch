@@ -1,0 +1,10 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  application:
+    name: inflace-batch
+  datasource:
+    url: ${INFLACE_DB_URL}
+    username: ${INFLACE_DB_USERNAME}
+    password: ${INFLACE_DB_PASSWORD}

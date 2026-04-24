@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: inflace-batch
+  datasource:
+    url: jdbc:postgresql://localhost:15500/inflace?reWriteBatchedInserts=true
+    username: inflace
+    password: password

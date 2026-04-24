@@ -1,0 +1,101 @@
+name: Inflace Batch CD
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build And Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      AWS_REGION: ap-northeast-2
+      ECR_IMAGE: 283523669119.dkr.ecr.ap-northeast-2.amazonaws.com/inflace-batch-dev
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Environment (dev or prod)
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            ENVIRONMENT=prod
+          else
+            ENVIRONMENT=dev
+          fi
+
+          echo "ENVIRONMENT=${ENVIRONMENT}" >> "$GITHUB_ENV"
+          echo "APP_NAME=inflace-batch-${ENVIRONMENT}" >> "$GITHUB_ENV"
+          echo "SPRING_PROFILES_ACTIVE=${ENVIRONMENT}" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build and Push Image
+        run: ./gradlew jib -x test
+        env:
+          SPRING_PROFILES_ACTIVE: ${{ env.SPRING_PROFILES_ACTIVE }}
+
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          ECR_IMAGE: ${{ env.ECR_IMAGE }}
+          IMAGE_TAG: ${{ github.sha }}
+          APP_NAME: ${{ env.APP_NAME }}
+          SPRING_PROFILES_ACTIVE: ${{ env.SPRING_PROFILES_ACTIVE }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          INFLACE_DB_URL: ${{ secrets.INFLACE_DB_URL }}
+          INFLACE_DB_USERNAME: ${{ secrets.INFLACE_DB_USERNAME }}
+          INFLACE_DB_PASSWORD: ${{ secrets.INFLACE_DB_PASSWORD }}
+          YOUTUBE_BATCH_DISCORD_WEBHOOK_URL: ${{ secrets.YOUTUBE_BATCH_DISCORD_WEBHOOK_URL }}
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          port: ${{ secrets.GCP_SSH_PORT || 22 }}
+          envs: AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_REGION,ECR_IMAGE,IMAGE_TAG,APP_NAME,SPRING_PROFILES_ACTIVE,YT_API_KEY,INFLACE_DB_URL,INFLACE_DB_USERNAME,INFLACE_DB_PASSWORD,YOUTUBE_BATCH_DISCORD_WEBHOOK_URL
+          script: |
+            set -e
+
+            aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$(echo "$ECR_IMAGE" | cut -d/ -f1)"
+
+            docker pull "$ECR_IMAGE:$IMAGE_TAG"
+            docker stop "$APP_NAME" || true
+            docker rm "$APP_NAME" || true
+
+            docker run -d \
+              --name "$APP_NAME" \
+              --restart unless-stopped \
+              -e SPRING_PROFILES_ACTIVE="$SPRING_PROFILES_ACTIVE" \
+              -e YT_API_KEY="$YT_API_KEY" \
+              -e INFLACE_DB_URL="$INFLACE_DB_URL" \
+              -e INFLACE_DB_USERNAME="$INFLACE_DB_USERNAME" \
+              -e INFLACE_DB_PASSWORD="$INFLACE_DB_PASSWORD" \
+              -e YOUTUBE_BATCH_DISCORD_WEBHOOK_URL="$YOUTUBE_BATCH_DISCORD_WEBHOOK_URL" \
+              "$ECR_IMAGE:$IMAGE_TAG"
+
+            docker image prune -f
