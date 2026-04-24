@@ -1,0 +1,42 @@
+spring:
+  profiles:
+    default: local
+  application:
+    name: inflace-batch
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: always
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:org/springframework/batch/core/schema-drop-postgresql.sql
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 100
+        order_inserts: true
+        order_updates: true
+
+youtube:
+  batch:
+    api-key: ${YT_API_KEY:}
+    base-url: https://www.googleapis.com/youtube/v3
+    region-code: KR
+    hl: ko_KR
+    min-channel-count: 50
+    recent-days: 30
+    notification:
+      discord:
+        enabled: true
+        webhook-url: ${YOUTUBE_BATCH_DISCORD_WEBHOOK_URL:}
+        username: inflace-batch
+    schedule:
+      enabled: true
+      cron: "0 0 3 * * *"
+      zone: Asia/Seoul
