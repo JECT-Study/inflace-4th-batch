@@ -6,6 +6,7 @@ import com.infalce.batch.domain.youtube.batch.listener.YoutubeCategoryChannelJob
 import com.infalce.batch.domain.youtube.batch.listener.YoutubeCategoryChannelStepExecutionListener;
 import com.infalce.batch.domain.youtube.batch.listener.model.YoutubeBatchStepExecutionContext;
 import com.infalce.batch.domain.youtube.model.CategoryChannelDiscovery;
+import com.infalce.batch.domain.youtube.repository.ChannelRepository;
 import com.infalce.batch.domain.youtube.service.YoutubeCategoryChannelBatchService;
 import com.infalce.batch.entity.channel.Channel;
 import com.infalce.batch.entity.video.YoutubeCategory;
@@ -17,6 +18,7 @@ import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.job.builder.SimpleJobBuilder;
 import org.springframework.batch.core.listener.ExecutionContextPromotionListener;
+import org.springframework.batch.core.partition.support.Partitioner;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
@@ -30,10 +32,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
 @RequiredArgsConstructor
@@ -41,13 +47,17 @@ import java.util.ArrayList;
 public class YoutubeCategoryChannelJobConfig {
 
     public static final String JOB_NAME = "youtubeCategoryChannelJob";
-    private static final int CHUNK_SIZE = 10;
+    private static final int DEFAULT_CHUNK_SIZE = 10;
+    private static final int METRICS_CHUNK_SIZE = 50;
+    private static final int METRICS_GRID_SIZE = 4;
+    private static final String METRICS_WORKER_STEP_NAME = "youtubeChannelMetricsRefreshWorkerStep";
 
     private final YoutubeCategoryChannelBatchService service;
     private final JobRepository jobRepository;
     private final YoutubeCategoryChannelJobExecutionListener jobExecutionListener;
     private final YoutubeCategoryChannelStepExecutionListener stepExecutionListener;
     private final YoutubeBatchProperties properties;
+    private final ChannelRepository channelRepository;
 
     @Bean
     public Job youtubeCategoryChannelJob(
@@ -71,7 +81,7 @@ public class YoutubeCategoryChannelJobConfig {
             ExecutionContextPromotionListener youtubeCategorySyncPromotionListener
     ) {
         return new StepBuilder("youtubeCategorySyncStep", jobRepository)
-                .<YoutubeCategoryItem, YoutubeCategoryItem>chunk(CHUNK_SIZE, transactionManager)
+                .<YoutubeCategoryItem, YoutubeCategoryItem>chunk(DEFAULT_CHUNK_SIZE, transactionManager)
                 .listener(stepExecutionListener)
                 .listener(youtubeCategorySyncPromotionListener)
                 .reader(youtubeCategorySyncReader)
@@ -88,7 +98,7 @@ public class YoutubeCategoryChannelJobConfig {
             ExecutionContextPromotionListener youtubeChannelDiscoveryPromotionListener
     ) {
         return new StepBuilder("youtubeChannelDiscoveryStep", jobRepository)
-                .<YoutubeCategory, CategoryChannelDiscovery>chunk(CHUNK_SIZE, transactionManager)
+                .<YoutubeCategory, CategoryChannelDiscovery>chunk(DEFAULT_CHUNK_SIZE, transactionManager)
                 .listener(stepExecutionListener)
                 .listener(youtubeChannelDiscoveryPromotionListener)
                 .reader(youtubeChannelDiscoveryReader)
@@ -99,17 +109,15 @@ public class YoutubeCategoryChannelJobConfig {
 
     @Bean
     public Step youtubeChannelMetricsRefreshStep(
-            PlatformTransactionManager transactionManager,
-            ItemStreamReader<Channel> youtubeChannelMetricsReader,
-            ItemWriter<Channel> youtubeChannelMetricsWriter,
-            ExecutionContextPromotionListener youtubeChannelMetricsPromotionListener
+            Step youtubeChannelMetricsRefreshWorkerStep,
+            TaskExecutor youtubeChannelMetricsTaskExecutor
     ) {
         return new StepBuilder("youtubeChannelMetricsRefreshStep", jobRepository)
-                .<Channel, Channel>chunk(CHUNK_SIZE, transactionManager)
+                .partitioner(METRICS_WORKER_STEP_NAME, youtubeChannelMetricsPartitioner())
+                .step(youtubeChannelMetricsRefreshWorkerStep)
+                .gridSize(METRICS_GRID_SIZE)
+                .taskExecutor(youtubeChannelMetricsTaskExecutor)
                 .listener(stepExecutionListener)
-                .listener(youtubeChannelMetricsPromotionListener)
-                .reader(youtubeChannelMetricsReader)
-                .writer(youtubeChannelMetricsWriter)
                 .build();
     }
 
@@ -130,11 +138,62 @@ public class YoutubeCategoryChannelJobConfig {
     }
 
     @Bean
-    public ExecutionContextPromotionListener youtubeChannelMetricsPromotionListener() {
-        return promotionListener(
-                YoutubeBatchStepExecutionContext.CHANNEL_METRICS_CHANNEL_COUNT,
-                YoutubeBatchStepExecutionContext.CHANNEL_METRICS_VIDEO_COUNT
-        );
+    public Step youtubeChannelMetricsRefreshWorkerStep(
+            PlatformTransactionManager transactionManager,
+            ItemStreamReader<Channel> youtubeChannelMetricsReader,
+            ItemWriter<Channel> youtubeChannelMetricsWriter
+    ) {
+        return new StepBuilder(METRICS_WORKER_STEP_NAME, jobRepository)
+                .<Channel, Channel>chunk(METRICS_CHUNK_SIZE, transactionManager)
+                .listener(stepExecutionListener)
+                .reader(youtubeChannelMetricsReader)
+                .writer(youtubeChannelMetricsWriter)
+                .build();
+    }
+
+    @Bean
+    public TaskExecutor youtubeChannelMetricsTaskExecutor() {
+        ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutor();
+        taskExecutor.setThreadNamePrefix("youtube-metrics-");
+        taskExecutor.setCorePoolSize(METRICS_GRID_SIZE);
+        taskExecutor.setMaxPoolSize(METRICS_GRID_SIZE);
+        taskExecutor.setQueueCapacity(0);
+        taskExecutor.initialize();
+        return taskExecutor;
+    }
+
+    @Bean
+    public Partitioner youtubeChannelMetricsPartitioner() {
+        return gridSize -> {
+            Long minId = channelRepository.findMinIdByYoutubeChannelIdIsNotNull();
+            Long maxId = channelRepository.findMaxIdByYoutubeChannelIdIsNotNull();
+
+            Map<String, org.springframework.batch.item.ExecutionContext> partitions = new HashMap<>();
+            if (minId == null || maxId == null) {
+                org.springframework.batch.item.ExecutionContext empty = new org.springframework.batch.item.ExecutionContext();
+                empty.putLong("minId", 1L);
+                empty.putLong("maxId", 0L);
+                partitions.put("partition0", empty);
+                return partitions;
+            }
+
+            long targetGridSize = Math.max(1, gridSize);
+            long range = (maxId - minId) + 1;
+            long partitionSize = Math.max(1, (long) Math.ceil((double) range / targetGridSize));
+
+            long start = minId;
+            int partitionIndex = 0;
+            while (start <= maxId) {
+                long end = Math.min(start + partitionSize - 1, maxId);
+                org.springframework.batch.item.ExecutionContext executionContext = new org.springframework.batch.item.ExecutionContext();
+                executionContext.putLong("minId", start);
+                executionContext.putLong("maxId", end);
+                partitions.put("partition" + partitionIndex, executionContext);
+                start = end + 1;
+                partitionIndex++;
+            }
+            return partitions;
+        };
     }
 
     @Bean
@@ -173,7 +232,7 @@ public class YoutubeCategoryChannelJobConfig {
                 .name("youtubeChannelDiscoveryReader")
                 .entityManagerFactory(entityManagerFactory)
                 .queryString("select c from YoutubeCategory c order by c.youtubeCategoryId asc")
-                .pageSize(CHUNK_SIZE)
+                .pageSize(DEFAULT_CHUNK_SIZE)
                 .build();
         reader.setSaveState(false);
         return reader;
@@ -210,13 +269,25 @@ public class YoutubeCategoryChannelJobConfig {
     @Bean
     @StepScope
     public ItemStreamReader<Channel> youtubeChannelMetricsReader(
-            EntityManagerFactory entityManagerFactory
+            EntityManagerFactory entityManagerFactory,
+            @Value("#{stepExecutionContext['minId']}") Long minId,
+            @Value("#{stepExecutionContext['maxId']}") Long maxId
     ) {
         JpaPagingItemReader<Channel> reader = new JpaPagingItemReaderBuilder<Channel>()
                 .name("youtubeChannelMetricsReader")
                 .entityManagerFactory(entityManagerFactory)
-                .queryString("select c from Channel c where c.youtubeChannelId is not null order by c.id asc")
-                .pageSize(CHUNK_SIZE)
+                .queryString("""
+                        select c
+                        from Channel c
+                        where c.youtubeChannelId is not null
+                          and c.id between :minId and :maxId
+                        order by c.id asc
+                        """)
+                .parameterValues(Map.of(
+                        "minId", minId != null ? minId : 1L,
+                        "maxId", maxId != null ? maxId : 0L
+                ))
+                .pageSize(METRICS_CHUNK_SIZE)
                 .build();
         reader.setSaveState(false);
         return reader;
