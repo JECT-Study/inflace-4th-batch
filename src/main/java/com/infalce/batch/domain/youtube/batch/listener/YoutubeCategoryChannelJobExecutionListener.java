@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Comparator;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,11 +27,11 @@ public class YoutubeCategoryChannelJobExecutionListener implements JobExecutionL
         long categorySyncNewCount = readLong(jobExecution, YoutubeBatchStepExecutionContext.CATEGORY_SYNC_NEW_COUNT);
         long channelDiscoveryCategoryCount = readLong(jobExecution, YoutubeBatchStepExecutionContext.CHANNEL_DISCOVERY_CATEGORY_COUNT);
         long channelDiscoveryDiscoveredChannelCount = readLong(jobExecution, YoutubeBatchStepExecutionContext.CHANNEL_DISCOVERY_DISCOVERED_CHANNEL_COUNT);
-        long channelMetricsChannelCount = readLong(jobExecution, YoutubeBatchStepExecutionContext.CHANNEL_METRICS_CHANNEL_COUNT);
-        long channelMetricsVideoCount = readLong(jobExecution, YoutubeBatchStepExecutionContext.CHANNEL_METRICS_VIDEO_COUNT);
+        long channelMetricsChannelCount = sumWorkerStepLong(jobExecution, YoutubeBatchStepExecutionContext.CHANNEL_METRICS_CHANNEL_COUNT);
+        long channelMetricsVideoCount = sumWorkerStepLong(jobExecution, YoutubeBatchStepExecutionContext.CHANNEL_METRICS_VIDEO_COUNT);
         String duration = formatDuration(jobExecution);
 
-        String stepSummary = jobExecution.getStepExecutions().stream()
+        String stepSummary = logicalStepExecutions(jobExecution).stream()
                 .sorted(Comparator.comparing(StepExecution::getStepName))
                 .map(stepExecution -> stepName(stepExecution.getStepName()) + ": " + status(stepExecution.getStatus().toString()))
                 .collect(Collectors.joining("\n"));
@@ -72,6 +73,21 @@ public class YoutubeCategoryChannelJobExecutionListener implements JobExecutionL
         return jobExecution.getExecutionContext().containsKey(key)
                 ? jobExecution.getExecutionContext().getLong(key)
                 : 0L;
+    }
+
+    private long sumWorkerStepLong(JobExecution jobExecution, String key) {
+        return jobExecution.getStepExecutions().stream()
+                .filter(stepExecution -> stepExecution.getStepName().startsWith("youtubeChannelMetricsRefreshWorkerStep"))
+                .mapToLong(stepExecution -> stepExecution.getExecutionContext().containsKey(key)
+                        ? stepExecution.getExecutionContext().getLong(key)
+                        : 0L)
+                .sum();
+    }
+
+    private List<StepExecution> logicalStepExecutions(JobExecution jobExecution) {
+        return jobExecution.getStepExecutions().stream()
+                .filter(stepExecution -> !stepExecution.getStepName().startsWith("youtubeChannelMetricsRefreshWorkerStep"))
+                .toList();
     }
 
     private String stepName(String stepName) {

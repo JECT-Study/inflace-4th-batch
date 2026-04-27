@@ -22,12 +22,7 @@ public class YoutubeCategoryChannelStepExecutionListener implements StepExecutio
 
     @Override
     public ExitStatus afterStep(StepExecution stepExecution) {
-        String customSummary = switch (stepExecution.getStepName()) {
-            case "youtubeCategorySyncStep" -> formatCategorySyncSummary(stepExecution);
-            case "youtubeChannelDiscoveryStep" -> formatChannelDiscoverySummary(stepExecution);
-            case "youtubeChannelMetricsRefreshStep" -> formatChannelMetricsSummary(stepExecution);
-            default -> "";
-        };
+        String customSummary = resolveCustomSummary(stepExecution);
         String duration = formatDuration(stepExecution);
 
         if (stepExecution.getStatus() == BatchStatus.FAILED) {
@@ -69,6 +64,16 @@ public class YoutubeCategoryChannelStepExecutionListener implements StepExecutio
             );
         }
         return stepExecution.getExitStatus();
+    }
+
+    private String resolveCustomSummary(StepExecution stepExecution) {
+        return switch (stepExecution.getStepName()) {
+            case "youtubeCategorySyncStep" -> formatCategorySyncSummary(stepExecution);
+            case "youtubeChannelDiscoveryStep" -> formatChannelDiscoverySummary(stepExecution);
+            default -> stepExecution.getStepName().startsWith("youtubeChannelMetricsRefreshWorkerStep")
+                    ? formatChannelMetricsSummary(stepExecution)
+                    : "";
+        };
     }
 
     private String formatCategorySyncSummary(StepExecution stepExecution) {

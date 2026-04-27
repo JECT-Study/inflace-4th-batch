@@ -165,6 +165,9 @@ public class YoutubeBatchDiscordNotifier {
     }
 
     private String stepName(String stepName) {
+        if (stepName != null && stepName.startsWith("youtubeChannelMetricsRefreshWorkerStep")) {
+            return "채널 메트릭 갱신";
+        }
         return switch (stepName) {
             case "youtubeCategorySyncStep" -> "카테고리 동기화";
             case "youtubeChannelDiscoveryStep" -> "채널 탐색";
