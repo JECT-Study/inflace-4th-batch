@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Build And Push Image
+    name: Build And Deploy Batch
     runs-on: ubuntu-latest
     permissions:
       contents: read
