@@ -8,8 +8,9 @@ public record ChannelMetricRow(
         Long totalViewCount,
         Long totalVideoCount,
         Integer recentUploadCount30d,
-        Double avgViewsRecentN,
-        Double avgEngagementRateRecentN,
+        Double avgViewsRecent,
+        Double avgEngagementRateRecent,
+        Double avgOutlierScoreRecentExcludingTop5Pct,
         LocalDateTime collectedAt
 ) {
 }
