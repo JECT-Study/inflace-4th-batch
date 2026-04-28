@@ -5,6 +5,7 @@ import com.infalce.batch.domain.youtube.api.YoutubeBatchProperties;
 import com.infalce.batch.domain.youtube.batch.listener.YoutubeCategoryChannelJobExecutionListener;
 import com.infalce.batch.domain.youtube.batch.listener.YoutubeCategoryChannelStepExecutionListener;
 import com.infalce.batch.domain.youtube.batch.listener.model.YoutubeBatchStepExecutionContext;
+import com.infalce.batch.domain.youtube.batch.reader.ChannelNoOffsetPagingItemReader;
 import com.infalce.batch.domain.youtube.model.CategoryChannelDiscovery;
 import com.infalce.batch.domain.youtube.repository.ChannelRepository;
 import com.infalce.batch.domain.youtube.service.YoutubeCategoryChannelBatchService;
@@ -25,7 +26,6 @@ import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemStreamReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.beans.factory.annotation.Value;
@@ -228,7 +228,7 @@ public class YoutubeCategoryChannelJobConfig {
     public ItemStreamReader<YoutubeCategory> youtubeChannelDiscoveryReader(
             EntityManagerFactory entityManagerFactory
     ) {
-        JpaPagingItemReader<YoutubeCategory> reader = new JpaPagingItemReaderBuilder<YoutubeCategory>()
+        var reader = new JpaPagingItemReaderBuilder<YoutubeCategory>()
                 .name("youtubeChannelDiscoveryReader")
                 .entityManagerFactory(entityManagerFactory)
                 .queryString("select c from YoutubeCategory c order by c.youtubeCategoryId asc")
@@ -273,22 +273,13 @@ public class YoutubeCategoryChannelJobConfig {
             @Value("#{stepExecutionContext['minId']}") Long minId,
             @Value("#{stepExecutionContext['maxId']}") Long maxId
     ) {
-        JpaPagingItemReader<Channel> reader = new JpaPagingItemReaderBuilder<Channel>()
-                .name("youtubeChannelMetricsReader")
-                .entityManagerFactory(entityManagerFactory)
-                .queryString("""
-                        select c
-                        from Channel c
-                        where c.youtubeChannelId is not null
-                          and c.id between :minId and :maxId
-                        order by c.id asc
-                        """)
-                .parameterValues(Map.of(
-                        "minId", minId != null ? minId : 1L,
-                        "maxId", maxId != null ? maxId : 0L
-                ))
-                .pageSize(METRICS_CHUNK_SIZE)
-                .build();
+        ChannelNoOffsetPagingItemReader reader = new ChannelNoOffsetPagingItemReader(
+                entityManagerFactory,
+                METRICS_CHUNK_SIZE,
+                minId != null ? minId : 1L,
+                maxId != null ? maxId : 0L
+        );
+        reader.setName("youtubeChannelMetricsReader");
         reader.setSaveState(false);
         return reader;
     }
