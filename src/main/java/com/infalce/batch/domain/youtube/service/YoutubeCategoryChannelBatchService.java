@@ -36,8 +36,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -347,6 +345,12 @@ public class YoutubeCategoryChannelBatchService {
             double avgEngagementRate = totalViews > 0
                     ? round(((double) (totalLikes + totalComments) / totalViews) * 100.0, 2)
                     : 0.0;
+            double avgOutlierScoreRecentExcludingTop5Pct =
+                    ChannelOutlierCalculator.calculateAverageOutlierScoreRecentExcludingTop5Pct(
+                            recentVideos,
+                            channel.viewCount(),
+                            channel.videoCount()
+                    );
 
             rows.put(channel.youtubeChannelId(), new ChannelMetricRow(
                     channel.youtubeChannelId(),
@@ -356,6 +360,7 @@ public class YoutubeCategoryChannelBatchService {
                     aggregate.recentUploadCount(),
                     avgViews,
                     avgEngagementRate,
+                    avgOutlierScoreRecentExcludingTop5Pct,
                     aggregate.collectedAt()
             ));
         }
@@ -512,8 +517,9 @@ public class YoutubeCategoryChannelBatchService {
                         row.totalViewCount(),
                         row.totalVideoCount(),
                         row.recentUploadCount30d(),
-                        row.avgViewsRecentN(),
-                        row.avgEngagementRateRecentN(),
+                        row.avgViewsRecent(),
+                        row.avgEngagementRateRecent(),
+                        row.avgOutlierScoreRecentExcludingTop5Pct(),
                         row.collectedAt()
                 ));
             } else {
@@ -523,8 +529,9 @@ public class YoutubeCategoryChannelBatchService {
                         row.totalViewCount(),
                         row.totalVideoCount(),
                         row.recentUploadCount30d(),
-                        row.avgViewsRecentN(),
-                        row.avgEngagementRateRecentN(),
+                        row.avgViewsRecent(),
+                        row.avgEngagementRateRecent(),
+                        row.avgOutlierScoreRecentExcludingTop5Pct(),
                         row.collectedAt()
                 );
             }
@@ -763,15 +770,14 @@ public class YoutubeCategoryChannelBatchService {
     }
 
     private Double calculateOutlierScore(Long videoViewCount, ChannelMetricRow channelMetric) {
-        if (channelMetric == null || defaultLong(channelMetric.totalVideoCount()) <= 0) {
+        if (channelMetric == null) {
             return null;
         }
-        double avgChannelViewCount = (double) defaultLong(channelMetric.totalViewCount())
-                / defaultLong(channelMetric.totalVideoCount());
-        if (avgChannelViewCount <= 0) {
-            return null;
-        }
-        return round(defaultLong(videoViewCount) / avgChannelViewCount, 6);
+        return ChannelOutlierCalculator.calculateOutlierScore(
+                videoViewCount,
+                channelMetric.totalViewCount(),
+                channelMetric.totalVideoCount()
+        );
     }
 
     private Double calculateViewsPerHour(Long videoViewCount, LocalDateTime publishedAt, LocalDateTime collectedAt) {
@@ -823,18 +829,18 @@ public class YoutubeCategoryChannelBatchService {
         return value == null ? 0L : value;
     }
 
-    private double round(double value, int scale) {
-        return BigDecimal.valueOf(value)
-                .setScale(scale, RoundingMode.HALF_UP)
-                .doubleValue();
-    }
-
     private <T> List<List<T>> chunked(List<T> values, int size) {
         List<List<T>> chunks = new ArrayList<>();
         for (int start = 0; start < values.size(); start += size) {
             chunks.add(values.subList(start, Math.min(values.size(), start + size)));
         }
         return chunks;
+    }
+
+    private double round(double value, int scale) {
+        return java.math.BigDecimal.valueOf(value)
+                .setScale(scale, java.math.RoundingMode.HALF_UP)
+                .doubleValue();
     }
 
 }
