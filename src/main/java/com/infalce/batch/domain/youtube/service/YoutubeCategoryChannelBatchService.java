@@ -5,6 +5,7 @@ import com.infalce.batch.domain.youtube.api.YoutubeApiClient.PlaylistVideoItem;
 import com.infalce.batch.domain.youtube.api.YoutubeApiClient.YoutubeCategoryItem;
 import com.infalce.batch.domain.youtube.api.YoutubeApiClient.YoutubeChannelItem;
 import com.infalce.batch.domain.youtube.api.YoutubeApiClient.YoutubeVideoItem;
+import com.infalce.batch.domain.youtube.api.YoutubeApiException;
 import com.infalce.batch.domain.youtube.batch.summary.CategorySyncSummary;
 import com.infalce.batch.domain.youtube.batch.summary.ChannelMetricsWriteSummary;
 import com.infalce.batch.domain.youtube.batch.summary.DiscoveryWriteSummary;
@@ -292,11 +293,20 @@ public class YoutubeCategoryChannelBatchService {
         String pageToken = null;
 
         while (true) {
-            YoutubeApiClient.PlaylistItemsPage page = youtubeApiClient.listPlaylistItems(
-                    playlistId,
-                    pageToken,
-                    YOUTUBE_MAX_RESULTS
-            );
+            YoutubeApiClient.PlaylistItemsPage page;
+            try {
+                page = youtubeApiClient.listPlaylistItems(
+                        playlistId,
+                        pageToken,
+                        YOUTUBE_MAX_RESULTS
+                );
+            } catch (YoutubeApiException e) {
+                if (e.isPlaylistNotFound()) {
+                    log.warn("youtube uploads playlist not found. playlistId={}", playlistId);
+                    return new UploadMetrics(0, List.of());
+                }
+                throw e;
+            }
             if (page.items().isEmpty()) {
                 break;
             }
