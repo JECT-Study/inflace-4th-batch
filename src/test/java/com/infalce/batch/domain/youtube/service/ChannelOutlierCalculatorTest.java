@@ -60,9 +60,12 @@ class ChannelOutlierCalculatorTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 viewCount,
                 0L,
-                0L
+                0L,
+                false
         );
     }
 }

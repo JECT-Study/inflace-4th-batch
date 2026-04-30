@@ -173,14 +173,16 @@ public class YoutubeApiClient {
         List<YoutubeVideoItem> result = new ArrayList<>();
         for (List<String> chunk : chunked(normalizedVideoIds, YOUTUBE_MAX_RESULTS)) {
             JsonNode root = get("videos", Map.of(
-                    "part", "snippet,contentDetails,statistics",
+                    "part", "snippet,contentDetails,statistics,paidProductPlacementDetails",
                     "id", String.join(",", chunk),
-                    "fields", "items(id,snippet(channelId,title,description,publishedAt,tags,thumbnails,categoryId),contentDetails(duration),statistics(viewCount,likeCount,commentCount))"
+                    "fields", "items(id,snippet(channelId,title,description,publishedAt,tags,thumbnails(default(url,width,height),medium(url,width,height),high(url,width,height),standard(url,width,height),maxres(url,width,height)),categoryId),contentDetails(duration),statistics(viewCount,likeCount,commentCount),paidProductPlacementDetails(hasPaidProductPlacement))"
             ));
 
             for (JsonNode item : root.path("items")) {
                 JsonNode snippet = item.path("snippet");
                 JsonNode statistics = item.path("statistics");
+                JsonNode paidProductPlacementDetails = item.path("paidProductPlacementDetails");
+                ThumbnailInfo thumbnail = bestThumbnail(snippet.path("thumbnails"));
                 List<String> tags = new ArrayList<>();
                 for (JsonNode tag : snippet.path("tags")) {
                     tags.add(tag.asText());
@@ -192,12 +194,15 @@ public class YoutubeApiClient {
                         snippet.path("description").asText(null),
                         snippet.path("publishedAt").asText(null),
                         tags,
-                        bestThumbnailUrl(snippet.path("thumbnails")),
+                        thumbnail.url(),
+                        thumbnail.width(),
+                        thumbnail.height(),
                         toInteger(snippet.path("categoryId").asText(null)),
                         item.path("contentDetails").path("duration").asText(null),
                         toLong(statistics.path("viewCount").asText(null), 0L),
                         toLong(statistics.path("likeCount").asText(null), 0L),
-                        toLong(statistics.path("commentCount").asText(null), 0L)
+                        toLong(statistics.path("commentCount").asText(null), 0L),
+                        paidProductPlacementDetails.path("hasPaidProductPlacement").asBoolean(false)
                 ));
             }
         }
@@ -265,13 +270,22 @@ public class YoutubeApiClient {
     }
 
     private String bestThumbnailUrl(JsonNode thumbnails) {
+        return bestThumbnail(thumbnails).url();
+    }
+
+    private ThumbnailInfo bestThumbnail(JsonNode thumbnails) {
         for (String size : List.of("maxres", "standard", "high", "medium", "default")) {
-            String url = thumbnails.path(size).path("url").asText(null);
+            JsonNode thumbnail = thumbnails.path(size);
+            String url = thumbnail.path("url").asText(null);
             if (StringUtils.hasText(url)) {
-                return url;
+                return new ThumbnailInfo(
+                        url,
+                        toInteger(thumbnail.path("width").asText(null)),
+                        toInteger(thumbnail.path("height").asText(null))
+                );
             }
         }
-        return null;
+        return new ThumbnailInfo(null, null, null);
     }
 
     private Long toLong(String value) {
@@ -339,11 +353,17 @@ public class YoutubeApiClient {
             String publishedAt,
             List<String> tags,
             String thumbnailUrl,
+            Integer thumbnailWidth,
+            Integer thumbnailHeight,
             Integer categoryId,
             String duration,
             Long viewCount,
             Long likeCount,
-            Long commentCount
+            Long commentCount,
+            boolean hasPaidProductPlacement
     ) {
+    }
+
+    private record ThumbnailInfo(String url, Integer width, Integer height) {
     }
 }

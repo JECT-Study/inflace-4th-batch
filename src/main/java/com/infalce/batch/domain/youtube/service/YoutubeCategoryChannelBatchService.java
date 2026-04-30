@@ -599,6 +599,7 @@ public class YoutubeCategoryChannelBatchService {
 
         for (PreparedVideoWrite prepared : preparedVideos) {
             Video video = existingVideos.get(prepared.youtubeVideoId());
+            boolean isShort = isShortVideo(prepared.item(), prepared.durationSeconds());
             if (video == null) {
                 video = Video.of(
                         prepared.channel(),
@@ -608,8 +609,8 @@ public class YoutubeCategoryChannelBatchService {
                         prepared.item().description(),
                         prepared.item().thumbnailUrl(),
                         prepared.durationSeconds(),
-                        prepared.durationSeconds() != null && prepared.durationSeconds() <= 60,
-                        false,
+                        isShort,
+                        prepared.item().hasPaidProductPlacement(),
                         prepared.publishedAt()
                 );
                 existingVideos.put(prepared.youtubeVideoId(), video);
@@ -622,8 +623,8 @@ public class YoutubeCategoryChannelBatchService {
                         prepared.item().description(),
                         prepared.item().thumbnailUrl(),
                         prepared.durationSeconds(),
-                        prepared.durationSeconds() != null && prepared.durationSeconds() <= 60,
-                        false,
+                        isShort,
+                        prepared.item().hasPaidProductPlacement(),
                         prepared.publishedAt()
                 );
             }
@@ -790,6 +791,20 @@ public class YoutubeCategoryChannelBatchService {
         }
         double elapsedHours = Math.max(elapsedSeconds / 3600.0, 1.0);
         return round(defaultLong(videoViewCount) / elapsedHours, 6);
+    }
+
+    private boolean isShortVideo(YoutubeVideoItem item, Integer durationSeconds) {
+        if (durationSeconds == null || durationSeconds > 180) {
+            return false;
+        }
+
+        Integer thumbnailWidth = item.thumbnailWidth();
+        Integer thumbnailHeight = item.thumbnailHeight();
+        if (thumbnailWidth != null && thumbnailHeight != null && thumbnailWidth > 0 && thumbnailHeight > 0) {
+            return thumbnailHeight > thumbnailWidth;
+        }
+
+        return true;
     }
 
     private LocalDateTime parseYoutubeDateTime(String value) {
