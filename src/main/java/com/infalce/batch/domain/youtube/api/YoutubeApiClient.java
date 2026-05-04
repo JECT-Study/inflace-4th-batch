@@ -118,7 +118,7 @@ public class YoutubeApiClient {
             JsonNode root = get("channels", Map.of(
                     "part", "snippet,statistics,contentDetails",
                     "id", String.join(",", chunk),
-                    "fields", "items(id,snippet(title,customUrl,publishedAt,thumbnails),statistics(subscriberCount,hiddenSubscriberCount,videoCount,viewCount),contentDetails(relatedPlaylists/uploads))"
+                    "fields", "items(id,snippet(title,description,customUrl,publishedAt,thumbnails),statistics(subscriberCount,hiddenSubscriberCount,videoCount,viewCount),contentDetails(relatedPlaylists/uploads))"
             ));
 
             for (JsonNode item : root.path("items")) {
@@ -128,6 +128,7 @@ public class YoutubeApiClient {
                 result.add(new YoutubeChannelItem(
                         item.path("id").asText(null),
                         snippet.path("title").asText(null),
+                        snippet.path("description").asText(null),
                         snippet.path("customUrl").asText(null),
                         snippet.path("publishedAt").asText(null),
                         bestThumbnailUrl(snippet.path("thumbnails")),
@@ -328,6 +329,7 @@ public class YoutubeApiClient {
     public record YoutubeChannelItem(
             String youtubeChannelId,
             String title,
+            String description,
             String customUrl,
             String publishedAt,
             String thumbnailUrl,

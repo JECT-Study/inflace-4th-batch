@@ -32,6 +32,9 @@ public class Channel extends BaseTimeEntity {
 
     private String name;
 
+    @Column(name = "description")
+    private String description;
+
     @Column(name = "youtube_channel_id")
     private String youtubeChannelId;
 
@@ -47,11 +50,12 @@ public class Channel extends BaseTimeEntity {
     @Column(name = "youtube_published_at")
     private LocalDateTime youtubePublishedAt;
 
-    public static Channel of(User user, String name, String youtubeChannelId, String channelHandle,
+    public static Channel of(User user, String name, String description, String youtubeChannelId, String channelHandle,
                              String profileImageUrl, String uploadsPlaylistId, LocalDateTime youtubePublishedAt) {
         Channel channel = new Channel();
         channel.user = user;
         channel.name = name;
+        channel.description = description;
         channel.youtubeChannelId = youtubeChannelId;
         channel.channelHandle = channelHandle;
         channel.profileImageUrl = profileImageUrl;
@@ -61,10 +65,11 @@ public class Channel extends BaseTimeEntity {
     }
 
     public boolean update(
-            String name, String channelHandle, String profileImageUrl,
+            String name, String description, String channelHandle, String profileImageUrl,
             String uploadsPlaylistId, LocalDateTime youtubePublishedAt
     ) {
         boolean changed = !Objects.equals(this.name, name)
+                || !Objects.equals(this.description, description)
                 || !Objects.equals(this.channelHandle, channelHandle)
                 || !Objects.equals(this.profileImageUrl, profileImageUrl)
                 || !Objects.equals(this.uploadsPlaylistId, uploadsPlaylistId)
@@ -72,6 +77,7 @@ public class Channel extends BaseTimeEntity {
         if (!changed) return false;
 
         this.name = name;
+        this.description = description;
         this.channelHandle = channelHandle;
         this.profileImageUrl = profileImageUrl;
         this.uploadsPlaylistId = uploadsPlaylistId;
