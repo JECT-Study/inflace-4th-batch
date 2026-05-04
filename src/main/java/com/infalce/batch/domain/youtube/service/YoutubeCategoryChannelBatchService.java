@@ -395,6 +395,7 @@ public class YoutubeCategoryChannelBatchService {
                 channel = Channel.of(
                         null,
                         item.title(),
+                        item.description(),
                         item.youtubeChannelId(),
                         item.customUrl(),
                         item.thumbnailUrl(),
@@ -464,6 +465,7 @@ public class YoutubeCategoryChannelBatchService {
     private void applyChannelItem(Channel channel, YoutubeChannelItem item) {
         channel.update(
                 item.title(),
+                item.description(),
                 item.customUrl(),
                 item.thumbnailUrl(),
                 item.uploadsPlaylistId(),
