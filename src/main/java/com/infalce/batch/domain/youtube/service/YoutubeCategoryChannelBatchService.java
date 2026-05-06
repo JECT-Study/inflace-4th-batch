@@ -399,6 +399,7 @@ public class YoutubeCategoryChannelBatchService {
                         item.youtubeChannelId(),
                         item.customUrl(),
                         item.thumbnailUrl(),
+                        item.bannerImageUrl(),
                         item.uploadsPlaylistId(),
                         parseYoutubeDateTime(item.publishedAt())
                 );
@@ -468,6 +469,7 @@ public class YoutubeCategoryChannelBatchService {
                 item.description(),
                 item.customUrl(),
                 item.thumbnailUrl(),
+                item.bannerImageUrl(),
                 item.uploadsPlaylistId(),
                 parseYoutubeDateTime(item.publishedAt())
         );
