@@ -44,6 +44,9 @@ public class Channel extends BaseTimeEntity {
     @Column(name = "profile_image_url")
     private String profileImageUrl;
 
+    @Column(name = "banner_image_url")
+    private String bannerImageUrl;
+
     @Column(name = "uploads_playlist_id")
     private String uploadsPlaylistId;
 
@@ -51,7 +54,7 @@ public class Channel extends BaseTimeEntity {
     private LocalDateTime youtubePublishedAt;
 
     public static Channel of(User user, String name, String description, String youtubeChannelId, String channelHandle,
-                             String profileImageUrl, String uploadsPlaylistId, LocalDateTime youtubePublishedAt) {
+                             String profileImageUrl, String bannerImageUrl, String uploadsPlaylistId, LocalDateTime youtubePublishedAt) {
         Channel channel = new Channel();
         channel.user = user;
         channel.name = name;
@@ -59,19 +62,21 @@ public class Channel extends BaseTimeEntity {
         channel.youtubeChannelId = youtubeChannelId;
         channel.channelHandle = channelHandle;
         channel.profileImageUrl = profileImageUrl;
+        channel.bannerImageUrl = bannerImageUrl;
         channel.uploadsPlaylistId = uploadsPlaylistId;
         channel.youtubePublishedAt = youtubePublishedAt;
         return channel;
     }
 
     public boolean update(
-            String name, String description, String channelHandle, String profileImageUrl,
+            String name, String description, String channelHandle, String profileImageUrl, String bannerImageUrl,
             String uploadsPlaylistId, LocalDateTime youtubePublishedAt
     ) {
         boolean changed = !Objects.equals(this.name, name)
                 || !Objects.equals(this.description, description)
                 || !Objects.equals(this.channelHandle, channelHandle)
                 || !Objects.equals(this.profileImageUrl, profileImageUrl)
+                || !Objects.equals(this.bannerImageUrl, bannerImageUrl)
                 || !Objects.equals(this.uploadsPlaylistId, uploadsPlaylistId)
                 || !Objects.equals(this.youtubePublishedAt, youtubePublishedAt);
         if (!changed) return false;
@@ -80,6 +85,7 @@ public class Channel extends BaseTimeEntity {
         this.description = description;
         this.channelHandle = channelHandle;
         this.profileImageUrl = profileImageUrl;
+        this.bannerImageUrl = bannerImageUrl;
         this.uploadsPlaylistId = uploadsPlaylistId;
         this.youtubePublishedAt = youtubePublishedAt;
         return true;

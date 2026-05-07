@@ -116,14 +116,15 @@ public class YoutubeApiClient {
         List<YoutubeChannelItem> result = new ArrayList<>();
         for (List<String> chunk : chunked(normalizedChannelIds, YOUTUBE_MAX_RESULTS)) {
             JsonNode root = get("channels", Map.of(
-                    "part", "snippet,statistics,contentDetails",
+                    "part", "snippet,statistics,contentDetails,brandingSettings",
                     "id", String.join(",", chunk),
-                    "fields", "items(id,snippet(title,description,customUrl,publishedAt,thumbnails),statistics(subscriberCount,hiddenSubscriberCount,videoCount,viewCount),contentDetails(relatedPlaylists/uploads))"
+                    "fields", "items(id,snippet(title,description,customUrl,publishedAt,thumbnails),statistics(subscriberCount,hiddenSubscriberCount,videoCount,viewCount),contentDetails(relatedPlaylists/uploads),brandingSettings(image/bannerExternalUrl))"
             ));
 
             for (JsonNode item : root.path("items")) {
                 JsonNode snippet = item.path("snippet");
                 JsonNode statistics = item.path("statistics");
+                JsonNode brandingSettings = item.path("brandingSettings");
                 boolean hiddenSubscriberCount = statistics.path("hiddenSubscriberCount").asBoolean(false);
                 result.add(new YoutubeChannelItem(
                         item.path("id").asText(null),
@@ -132,6 +133,7 @@ public class YoutubeApiClient {
                         snippet.path("customUrl").asText(null),
                         snippet.path("publishedAt").asText(null),
                         bestThumbnailUrl(snippet.path("thumbnails")),
+                        brandingSettings.path("image").path("bannerExternalUrl").asText(null),
                         hiddenSubscriberCount ? null : toLong(statistics.path("subscriberCount").asText(null)),
                         hiddenSubscriberCount,
                         toLong(statistics.path("videoCount").asText(null), 0L),
@@ -333,6 +335,7 @@ public class YoutubeApiClient {
             String customUrl,
             String publishedAt,
             String thumbnailUrl,
+            String bannerImageUrl,
             Long subscriberCount,
             boolean hiddenSubscriberCount,
             Long videoCount,
