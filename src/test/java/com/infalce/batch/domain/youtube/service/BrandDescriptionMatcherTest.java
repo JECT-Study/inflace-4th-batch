@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,34 @@ class BrandDescriptionMatcherTest {
                 match.brand().getId().equals(1L) && match.matchedAlias().equals("삼성전자")));
         assertTrue(matches.stream().anyMatch(match ->
                 match.brand().getId().equals(2L) && match.matchedAlias().equals("나이키")));
+    }
+
+    @Test
+    void ignoresTooShortAliasesAndPrefersLongerOverlappingAlias() {
+        Brand lotto = brand(1L, "롯데");
+        Brand lotteria = brand(2L, "롯데리아");
+        Brand ryeo = brand(3L, "아모레퍼시픽");
+        Brand ty = brand(4L, "Ty");
+
+        BrandAliasRepository repository = mock(BrandAliasRepository.class);
+        when(repository.findAllWithBrand()).thenReturn(List.of(
+                brandAlias(11L, lotto, "롯데"),
+                brandAlias(12L, lotteria, "롯데리아"),
+                brandAlias(13L, ryeo, "려"),
+                brandAlias(14L, ty, "Ty")
+        ));
+
+        BrandDescriptionMatcher matcher = new BrandDescriptionMatcher(repository);
+
+        List<BrandDescriptionMatcher.BrandMatch> matches = matcher.matchDescription(
+                "롯데리아 햄버거 후기 퀄리티가 좋네요"
+        );
+
+        assertTrue(matches.stream().anyMatch(match ->
+                match.brand().getId().equals(2L) && match.matchedAlias().equals("롯데리아")));
+        assertFalse(matches.stream().anyMatch(match -> match.brand().getId().equals(1L)));
+        assertFalse(matches.stream().anyMatch(match -> match.brand().getId().equals(3L)));
+        assertFalse(matches.stream().anyMatch(match -> match.brand().getId().equals(4L)));
     }
 
     private Brand brand(Long id, String name) {
