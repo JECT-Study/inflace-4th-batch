@@ -16,6 +16,7 @@ import com.infalce.batch.domain.youtube.model.ChannelSnapshotKey;
 import com.infalce.batch.domain.youtube.model.PreparedVideoWrite;
 import com.infalce.batch.domain.youtube.model.UploadMetrics;
 import com.infalce.batch.domain.youtube.repository.ChannelCategoryRepository;
+import com.infalce.batch.domain.youtube.repository.ChannelBrandRepository;
 import com.infalce.batch.domain.youtube.repository.ChannelRepository;
 import com.infalce.batch.domain.youtube.repository.ChannelStatsHistoryRepository;
 import com.infalce.batch.domain.youtube.repository.ChannelStatsRepository;
@@ -24,6 +25,7 @@ import com.infalce.batch.domain.youtube.repository.VideoStatsRepository;
 import com.infalce.batch.domain.youtube.repository.VideoTagRepository;
 import com.infalce.batch.domain.youtube.repository.YoutubeCategoryRepository;
 import com.infalce.batch.entity.channel.Channel;
+import com.infalce.batch.entity.channel.ChannelBrand;
 import com.infalce.batch.entity.channel.ChannelCategory;
 import com.infalce.batch.entity.channel.ChannelStats;
 import com.infalce.batch.entity.channel.ChannelStatsHistory;
@@ -62,11 +64,13 @@ public class YoutubeCategoryChannelBatchService {
     private final YoutubeCategoryRepository youtubeCategoryRepository;
     private final ChannelRepository channelRepository;
     private final ChannelCategoryRepository channelCategoryRepository;
+    private final ChannelBrandRepository channelBrandRepository;
     private final ChannelStatsRepository channelStatsRepository;
     private final ChannelStatsHistoryRepository channelStatsHistoryRepository;
     private final VideoRepository videoRepository;
     private final VideoStatsRepository videoStatsRepository;
     private final VideoTagRepository videoTagRepository;
+    private final BrandDescriptionMatcher brandDescriptionMatcher;
 
     public List<YoutubeCategoryItem> loadYoutubeCategories(String regionCode, String hl) {
         return youtubeApiClient.listVideoCategories(regionCode, hl);
@@ -588,6 +592,7 @@ public class YoutubeCategoryChannelBatchService {
         }
 
         Map<String, Video> videos = upsertVideos(preparedVideos);
+        upsertChannelBrands(preparedVideos);
         upsertVideoStatsAndTags(preparedVideos, videos);
     }
 
@@ -714,6 +719,108 @@ public class YoutubeCategoryChannelBatchService {
         saveAllInChunks(videoTagRepository, newTags);
     }
 
+    private void upsertChannelBrands(List<PreparedVideoWrite> preparedVideos) {
+        if (preparedVideos.isEmpty()) {
+            return;
+        }
+        if (!brandDescriptionMatcher.hasAliasesConfigured()) {
+            return;
+        }
+
+        List<PreparedVideoWrite> targetVideos = preparedVideos.stream()
+                .filter(prepared -> prepared.channel() != null && prepared.channel().getId() != null)
+                .toList();
+        if (targetVideos.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Channel> channelsById = targetVideos.stream()
+                .map(PreparedVideoWrite::channel)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(
+                        Channel::getId,
+                        channel -> channel,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        Map<Long, Map<Long, BrandDescriptionMatcher.BrandMatch>> matchesByChannelId = new LinkedHashMap<>();
+        boolean hasCandidate = false;
+        for (PreparedVideoWrite prepared : targetVideos) {
+            YoutubeVideoItem item = prepared.item();
+            if (!item.hasPaidProductPlacement() || !StringUtils.hasText(item.description())) {
+                continue;
+            }
+
+            hasCandidate = true;
+            Map<Long, BrandDescriptionMatcher.BrandMatch> channelMatches = matchesByChannelId.computeIfAbsent(
+                    prepared.channel().getId(),
+                    key -> new LinkedHashMap<>()
+            );
+            for (BrandDescriptionMatcher.BrandMatch match : brandDescriptionMatcher.matchDescription(item.description())) {
+                if (match.brand() == null || match.brand().getId() == null) {
+                    continue;
+                }
+
+                BrandDescriptionMatcher.BrandMatch existing = channelMatches.get(match.brand().getId());
+                if (existing == null || match.matchedAlias().length() > existing.matchedAlias().length()) {
+                    channelMatches.put(match.brand().getId(), match);
+                }
+            }
+        }
+        if (!hasCandidate) {
+            return;
+        }
+
+        List<Long> channelIds = targetVideos.stream()
+                .map(PreparedVideoWrite::channel)
+                .filter(Objects::nonNull)
+                .map(Channel::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (channelIds.isEmpty()) {
+            return;
+        }
+
+        Map<String, ChannelBrand> existingMatches = channelBrandRepository.findByChannelIdIn(channelIds).stream()
+                .collect(Collectors.toMap(
+                        relation -> channelBrandKey(relation.getChannel().getId(), relation.getBrand().getId()),
+                        relation -> relation,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        Set<String> expectedKeys = new LinkedHashSet<>();
+        List<ChannelBrand> newMatches = new ArrayList<>();
+
+        for (Map.Entry<Long, Map<Long, BrandDescriptionMatcher.BrandMatch>> channelEntry : matchesByChannelId.entrySet()) {
+            Channel channel = channelsById.get(channelEntry.getKey());
+            if (channel == null) {
+                continue;
+            }
+
+            for (BrandDescriptionMatcher.BrandMatch match : channelEntry.getValue().values()) {
+                String key = channelBrandKey(channel.getId(), match.brand().getId());
+                expectedKeys.add(key);
+                ChannelBrand relation = existingMatches.get(key);
+                if (relation == null) {
+                    newMatches.add(ChannelBrand.of(channel, match.brand(), match.matchedAlias()));
+                } else {
+                    relation.update(match.matchedAlias());
+                }
+            }
+        }
+
+        List<ChannelBrand> obsoleteMatches = existingMatches.entrySet().stream()
+                .filter(entry -> !expectedKeys.contains(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .toList();
+
+        if (!obsoleteMatches.isEmpty()) {
+            channelBrandRepository.deleteAll(obsoleteMatches);
+        }
+        saveAllInChunks(channelBrandRepository, newMatches);
+    }
+
     private Set<ChannelSnapshotKey> loadExistingHistoryKeys(
             Collection<ChannelStats> existingStats,
             Map<String, ChannelMetricRow> metricRows
@@ -771,6 +878,10 @@ public class YoutubeCategoryChannelBatchService {
 
     private String videoTagKey(Long videoId, String tag) {
         return videoId + "::" + tag;
+    }
+
+    private String channelBrandKey(Long channelId, Long brandId) {
+        return channelId + "::" + brandId;
     }
 
     private <T> void saveAllInChunks(JpaRepository<T, ?> repository, List<T> entities) {
