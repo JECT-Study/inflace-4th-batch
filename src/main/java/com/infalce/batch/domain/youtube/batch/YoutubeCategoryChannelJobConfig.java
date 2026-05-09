@@ -22,10 +22,7 @@ import org.springframework.batch.core.listener.ExecutionContextPromotionListener
 import org.springframework.batch.core.partition.support.Partitioner;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemStreamReader;
-import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.*;
 import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.beans.factory.annotation.Value;
@@ -168,9 +165,9 @@ public class YoutubeCategoryChannelJobConfig {
             Long minId = channelRepository.findMinIdByYoutubeChannelIdIsNotNull();
             Long maxId = channelRepository.findMaxIdByYoutubeChannelIdIsNotNull();
 
-            Map<String, org.springframework.batch.item.ExecutionContext> partitions = new HashMap<>();
+            Map<String, ExecutionContext> partitions = new HashMap<>();
             if (minId == null || maxId == null) {
-                org.springframework.batch.item.ExecutionContext empty = new org.springframework.batch.item.ExecutionContext();
+                ExecutionContext empty = new ExecutionContext();
                 empty.putLong("minId", 1L);
                 empty.putLong("maxId", 0L);
                 partitions.put("partition0", empty);
@@ -185,7 +182,7 @@ public class YoutubeCategoryChannelJobConfig {
             int partitionIndex = 0;
             while (start <= maxId) {
                 long end = Math.min(start + partitionSize - 1, maxId);
-                org.springframework.batch.item.ExecutionContext executionContext = new org.springframework.batch.item.ExecutionContext();
+                ExecutionContext executionContext = new ExecutionContext();
                 executionContext.putLong("minId", start);
                 executionContext.putLong("maxId", end);
                 partitions.put("partition" + partitionIndex, executionContext);
