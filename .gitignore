@@ -38,5 +38,7 @@ out/
 
 ### Local Docs / Agent Notes ###
 docs/
+data/
+scripts/
 AGENTS.md
 HELP.md
