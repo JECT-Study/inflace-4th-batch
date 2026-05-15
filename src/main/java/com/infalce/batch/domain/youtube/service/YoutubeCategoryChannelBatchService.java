@@ -745,7 +745,7 @@ public class YoutubeCategoryChannelBatchService {
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
-        Map<Long, Map<Long, BrandDescriptionMatcher.BrandMatch>> matchesByChannelId = new LinkedHashMap<>();
+        Map<Long, Map<Long, ChannelBrandMatchSource>> matchesByChannelId = new LinkedHashMap<>();
         boolean hasCandidate = false;
         for (PreparedVideoWrite prepared : targetVideos) {
             YoutubeVideoItem item = prepared.item();
@@ -754,7 +754,7 @@ public class YoutubeCategoryChannelBatchService {
             }
 
             hasCandidate = true;
-            Map<Long, BrandDescriptionMatcher.BrandMatch> channelMatches = matchesByChannelId.computeIfAbsent(
+            Map<Long, ChannelBrandMatchSource> channelMatches = matchesByChannelId.computeIfAbsent(
                     prepared.channel().getId(),
                     key -> new LinkedHashMap<>()
             );
@@ -763,9 +763,11 @@ public class YoutubeCategoryChannelBatchService {
                     continue;
                 }
 
-                BrandDescriptionMatcher.BrandMatch existing = channelMatches.get(match.brand().getId());
-                if (existing == null || match.matchedAlias().length() > existing.matchedAlias().length()) {
-                    channelMatches.put(match.brand().getId(), match);
+                ChannelBrandMatchSource candidate = new ChannelBrandMatchSource(match, prepared.youtubeVideoId());
+                ChannelBrandMatchSource existing = channelMatches.get(match.brand().getId());
+                if (existing == null
+                        || candidate.match().matchedAlias().length() > existing.match().matchedAlias().length()) {
+                    channelMatches.put(match.brand().getId(), candidate);
                 }
             }
         }
@@ -794,20 +796,26 @@ public class YoutubeCategoryChannelBatchService {
         Set<String> expectedKeys = new LinkedHashSet<>();
         List<ChannelBrand> newMatches = new ArrayList<>();
 
-        for (Map.Entry<Long, Map<Long, BrandDescriptionMatcher.BrandMatch>> channelEntry : matchesByChannelId.entrySet()) {
+        for (Map.Entry<Long, Map<Long, ChannelBrandMatchSource>> channelEntry : matchesByChannelId.entrySet()) {
             Channel channel = channelsById.get(channelEntry.getKey());
             if (channel == null) {
                 continue;
             }
 
-            for (BrandDescriptionMatcher.BrandMatch match : channelEntry.getValue().values()) {
+            for (ChannelBrandMatchSource matchSource : channelEntry.getValue().values()) {
+                BrandDescriptionMatcher.BrandMatch match = matchSource.match();
                 String key = channelBrandKey(channel.getId(), match.brand().getId());
                 expectedKeys.add(key);
                 ChannelBrand relation = existingMatches.get(key);
                 if (relation == null) {
-                    newMatches.add(ChannelBrand.of(channel, match.brand(), match.matchedAlias()));
+                    newMatches.add(ChannelBrand.of(
+                            channel,
+                            match.brand(),
+                            match.matchedAlias(),
+                            matchSource.sourceYoutubeVideoId()
+                    ));
                 } else {
-                    relation.update(match.matchedAlias());
+                    relation.update(match.matchedAlias(), matchSource.sourceYoutubeVideoId());
                 }
             }
         }
@@ -981,6 +989,12 @@ public class YoutubeCategoryChannelBatchService {
         return java.math.BigDecimal.valueOf(value)
                 .setScale(scale, java.math.RoundingMode.HALF_UP)
                 .doubleValue();
+    }
+
+    private record ChannelBrandMatchSource(
+            BrandDescriptionMatcher.BrandMatch match,
+            String sourceYoutubeVideoId
+    ) {
     }
 
 }
