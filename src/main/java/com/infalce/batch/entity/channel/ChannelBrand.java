@@ -35,20 +35,26 @@ public class ChannelBrand extends BaseTimeEntity {
     @Column(name = "matched_alias", nullable = false)
     private String matchedAlias;
 
-    public static ChannelBrand of(Channel channel, Brand brand, String matchedAlias) {
+    @Column(name = "source_youtube_video_id")
+    private String sourceYoutubeVideoId;
+
+    public static ChannelBrand of(Channel channel, Brand brand, String matchedAlias, String sourceYoutubeVideoId) {
         ChannelBrand relation = new ChannelBrand();
         relation.channel = channel;
         relation.brand = brand;
         relation.matchedAlias = matchedAlias;
+        relation.sourceYoutubeVideoId = sourceYoutubeVideoId;
         return relation;
     }
 
-    public boolean update(String matchedAlias) {
-        if (Objects.equals(this.matchedAlias, matchedAlias)) {
+    public boolean update(String matchedAlias, String sourceYoutubeVideoId) {
+        if (Objects.equals(this.matchedAlias, matchedAlias)
+                && Objects.equals(this.sourceYoutubeVideoId, sourceYoutubeVideoId)) {
             return false;
         }
 
         this.matchedAlias = matchedAlias;
+        this.sourceYoutubeVideoId = sourceYoutubeVideoId;
         return true;
     }
 }
