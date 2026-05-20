@@ -16,6 +16,32 @@ spring:
           batch_size: 100
         order_inserts: true
         order_updates: true
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${GOOGLE_SMTP_USERNAME:}
+    password: ${GOOGLE_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+    auth-code-expiration-millis: 1800000  # 30 * 60 * 1000 == 30분
+
+email:
+  outbox:
+    relay:
+      max-attempt-count: 3
+      batch-size: 20
+      concurrency: 10
+      schedule:
+        enabled: true
+        fixed-delay-ms: 5000
 
 youtube:
   batch:
