@@ -14,7 +14,7 @@ import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemStreamReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -52,7 +52,7 @@ public class EmailOutboxRelayJobConfig {
     @Bean
     public Step emailOutboxClaimStep(
             PlatformTransactionManager transactionManager,
-            @Qualifier("emailOutboxClaimReader") ItemReader<EmailOutboxEvent> emailOutboxClaimReader,
+            @Qualifier("emailOutboxClaimReader") ItemStreamReader<EmailOutboxEvent> emailOutboxClaimReader,
             @Qualifier("emailOutboxClaimProcessor") ItemProcessor<EmailOutboxEvent, EmailOutboxEvent> emailOutboxClaimProcessor,
             @Qualifier("emailOutboxClaimWriter") ItemWriter<EmailOutboxEvent> emailOutboxClaimWriter
     ) {
@@ -67,7 +67,7 @@ public class EmailOutboxRelayJobConfig {
     @Bean
     public Step emailOutboxRelayStep(
             PlatformTransactionManager transactionManager,
-            @Qualifier("emailOutboxRelayReader") ItemReader<EmailOutboxEvent> emailOutboxRelayReader,
+            @Qualifier("emailOutboxRelayReader") ItemStreamReader<EmailOutboxEvent> emailOutboxRelayReader,
             @Qualifier("emailOutboxRelayWriter") ItemWriter<EmailOutboxEvent> emailOutboxRelayWriter
     ) {
         return new StepBuilder("emailOutboxRelayStep", jobRepository)
@@ -79,7 +79,7 @@ public class EmailOutboxRelayJobConfig {
 
     @Bean
     @StepScope
-    public ItemReader<EmailOutboxEvent> emailOutboxClaimReader(
+    public ItemStreamReader<EmailOutboxEvent> emailOutboxClaimReader(
             EntityManagerFactory entityManagerFactory,
             @Value("#{jobParameters['maxAttemptCount']}") Long maxAttemptCount,
             @Value("#{jobParameters['batchSize']}") Long batchSize
@@ -117,7 +117,7 @@ public class EmailOutboxRelayJobConfig {
 
     @Bean
     @StepScope
-    public ItemReader<EmailOutboxEvent> emailOutboxRelayReader(
+    public ItemStreamReader<EmailOutboxEvent> emailOutboxRelayReader(
             EntityManagerFactory entityManagerFactory,
             @Value("#{jobParameters['batchSize']}") Long batchSize,
             @Value("#{jobParameters['claimStartedAt']}") String claimStartedAt

@@ -6,6 +6,11 @@ spring:
   batch:
     job:
       enabled: false
+  task:
+    scheduling:
+      pool:
+        size: 2
+      thread-name-prefix: scheduler-
   jpa:
     open-in-view: false
     hibernate:
