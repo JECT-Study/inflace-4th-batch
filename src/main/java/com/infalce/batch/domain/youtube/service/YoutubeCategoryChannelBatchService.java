@@ -136,11 +136,21 @@ public class YoutubeCategoryChannelBatchService {
             return null;
         }
 
+        List<YoutubeChannelItem> channels = youtubeApiClient.getChannels(channelIds).stream()
+                .filter(item -> !isTopicChannel(item))
+                .toList();
+
         return new CategoryChannelDiscovery(
                 category.getId(),
                 category.getYoutubeCategoryId(),
-                youtubeApiClient.getChannels(channelIds)
+                channels
         );
+    }
+
+    static boolean isTopicChannel(YoutubeChannelItem item) {
+        return item != null
+                && StringUtils.hasText(item.title())
+                && item.title().strip().toLowerCase(Locale.ROOT).endsWith("- topic");
     }
 
     public DiscoveryWriteSummary writeDiscoveredChannels(List<CategoryChannelDiscovery> discoveries) {
