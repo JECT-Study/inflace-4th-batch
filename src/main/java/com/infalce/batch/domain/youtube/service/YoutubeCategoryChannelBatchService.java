@@ -936,18 +936,17 @@ public class YoutubeCategoryChannelBatchService {
         return round(defaultLong(videoViewCount) / elapsedHours, 6);
     }
 
-    private boolean isShortVideo(YoutubeVideoItem item, Integer durationSeconds) {
-        if (durationSeconds == null || durationSeconds > 180) {
-            return false;
-        }
-
+    static boolean isShortVideo(YoutubeVideoItem item, Integer durationSeconds) {
+        boolean isShortDuration = durationSeconds != null && durationSeconds <= 180;
         Integer thumbnailWidth = item.thumbnailWidth();
         Integer thumbnailHeight = item.thumbnailHeight();
-        if (thumbnailWidth != null && thumbnailHeight != null && thumbnailWidth > 0 && thumbnailHeight > 0) {
-            return thumbnailHeight > thumbnailWidth;
-        }
+        boolean isPortraitThumbnail = thumbnailWidth != null
+                && thumbnailHeight != null
+                && thumbnailWidth > 0
+                && thumbnailHeight > 0
+                && thumbnailHeight > thumbnailWidth;
 
-        return true;
+        return isShortDuration || isPortraitThumbnail;
     }
 
     private LocalDateTime parseYoutubeDateTime(String value) {
