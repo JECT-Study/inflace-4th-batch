@@ -1,7 +1,10 @@
 package com.infalce.batch.domain.youtube.service;
 
 import com.infalce.batch.domain.youtube.api.YoutubeApiClient.YoutubeChannelItem;
+import com.infalce.batch.domain.youtube.api.YoutubeApiClient.YoutubeVideoItem;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,6 +25,22 @@ class YoutubeCategoryChannelBatchServiceTest {
         assertFalse(YoutubeCategoryChannelBatchService.isTopicChannel(null));
     }
 
+    @Test
+    void identifiesShortVideoWhenDurationIsShortEvenWithLandscapeThumbnail() {
+        assertTrue(YoutubeCategoryChannelBatchService.isShortVideo(video(1280, 720), 180));
+    }
+
+    @Test
+    void identifiesShortVideoWhenThumbnailIsPortraitEvenWithLongDuration() {
+        assertTrue(YoutubeCategoryChannelBatchService.isShortVideo(video(720, 1280), 181));
+    }
+
+    @Test
+    void doesNotIdentifyShortVideoWhenNeitherConditionMatches() {
+        assertFalse(YoutubeCategoryChannelBatchService.isShortVideo(video(1280, 720), 181));
+        assertFalse(YoutubeCategoryChannelBatchService.isShortVideo(video(null, null), null));
+    }
+
     private YoutubeChannelItem channel(String title) {
         return new YoutubeChannelItem(
                 "channel-id",
@@ -36,6 +55,26 @@ class YoutubeCategoryChannelBatchServiceTest {
                 0L,
                 0L,
                 null
+        );
+    }
+
+    private YoutubeVideoItem video(Integer thumbnailWidth, Integer thumbnailHeight) {
+        return new YoutubeVideoItem(
+                "video-id",
+                "channel-id",
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                thumbnailWidth,
+                thumbnailHeight,
+                null,
+                null,
+                0L,
+                0L,
+                0L,
+                false
         );
     }
 }
