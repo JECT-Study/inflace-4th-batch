@@ -54,6 +54,7 @@ email:
 youtube:
   batch:
     api-key: ${YT_API_KEY:}
+    fallback-api-keys: ${YT_FALLBACK_API_KEYS:}
     base-url: https://www.googleapis.com/youtube/v3
     region-code: KR
     hl: ko_KR
