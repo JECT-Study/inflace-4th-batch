@@ -6,6 +6,9 @@ spring:
   batch:
     job:
       enabled: false
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
   task:
     scheduling:
       pool:
@@ -56,6 +59,12 @@ youtube:
     hl: ko_KR
     min-channel-count: 50
     recent-days: 30
+    brand-ai:
+      model: ${YOUTUBE_BRAND_AI_MODEL:GPT_4O_MINI}
+      max-tokens: 100
+      temperature: 0.1
+      context-radius: 400
+      max-answer-length: 50
     notification:
       discord:
         enabled: true
@@ -65,3 +74,10 @@ youtube:
       enabled: true
       cron: "0 0 3 * * *"
       zone: Asia/Seoul
+
+resilience4j:
+  bulkhead:
+    instances:
+      youtubeBrandAiExtractor:
+        max-concurrent-calls: 4
+        max-wait-duration: 2s
