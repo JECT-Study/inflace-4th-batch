@@ -29,6 +29,12 @@ public class YoutubeApiException extends IllegalStateException {
         return statusCode == 404;
     }
 
+    public boolean isQuotaExceeded() {
+        return statusCode == 403
+                && (responseBody.contains("\"reason\": \"quotaExceeded\"")
+                || responseBody.contains("\"reason\":\"quotaExceeded\""));
+    }
+
     public boolean isPlaylistNotFound() {
         return "playlistItems".equals(resource)
                 && statusCode == 404
