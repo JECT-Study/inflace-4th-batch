@@ -8,7 +8,9 @@ import com.infalce.batch.domain.youtube.batch.listener.model.YoutubeBatchStepExe
 import com.infalce.batch.domain.youtube.batch.reader.ChannelNoOffsetPagingItemReader;
 import com.infalce.batch.domain.youtube.model.CategoryChannelDiscovery;
 import com.infalce.batch.domain.youtube.repository.ChannelRepository;
-import com.infalce.batch.domain.youtube.service.YoutubeCategoryChannelBatchService;
+import com.infalce.batch.domain.youtube.service.YoutubeCategorySyncService;
+import com.infalce.batch.domain.youtube.service.YoutubeChannelDiscoveryService;
+import com.infalce.batch.domain.youtube.service.YoutubeChannelMetricsService;
 import com.infalce.batch.entity.channel.Channel;
 import com.infalce.batch.entity.video.YoutubeCategory;
 import jakarta.persistence.EntityManagerFactory;
@@ -49,7 +51,9 @@ public class YoutubeCategoryChannelJobConfig {
     private static final int METRICS_GRID_SIZE = 4;
     private static final String METRICS_WORKER_STEP_NAME = "youtubeChannelMetricsRefreshWorkerStep";
 
-    private final YoutubeCategoryChannelBatchService service;
+    private final YoutubeCategorySyncService categorySyncService;
+    private final YoutubeChannelDiscoveryService channelDiscoveryService;
+    private final YoutubeChannelMetricsService channelMetricsService;
     private final JobRepository jobRepository;
     private final YoutubeCategoryChannelJobExecutionListener jobExecutionListener;
     private final YoutubeCategoryChannelStepExecutionListener stepExecutionListener;
@@ -199,7 +203,7 @@ public class YoutubeCategoryChannelJobConfig {
             @Value("#{jobParameters['regionCode']}") String regionCode,
             @Value("#{jobParameters['hl']}") String hl
     ) {
-        return new ListItemReader<>(service.loadYoutubeCategories(
+        return new ListItemReader<>(categorySyncService.loadYoutubeCategories(
                 resolveStringJobParameter(regionCode, properties.getRegionCode()),
                 resolveStringJobParameter(hl, properties.getHl())
         ));
@@ -208,7 +212,7 @@ public class YoutubeCategoryChannelJobConfig {
     @Bean
     public ItemWriter<YoutubeCategoryItem> youtubeCategorySyncWriter() {
         return chunk -> {
-            var summary = service.upsertCategories(new ArrayList<>(chunk.getItems()));
+            var summary = categorySyncService.upsertCategories(new ArrayList<>(chunk.getItems()));
             YoutubeBatchStepExecutionContext.addLong(
                     YoutubeBatchStepExecutionContext.CATEGORY_SYNC_CHANGED_COUNT,
                     summary.changedCount()
@@ -241,7 +245,7 @@ public class YoutubeCategoryChannelJobConfig {
             @Value("#{jobParameters['regionCode']}") String regionCode,
             @Value("#{jobParameters['minChannelCount']}") Long minChannelCount
     ) {
-        return category -> service.collectCategoryChannelDiscovery(
+        return category -> channelDiscoveryService.collectCategoryChannelDiscovery(
                 category,
                 resolveStringJobParameter(regionCode, properties.getRegionCode()),
                 resolveIntJobParameter(minChannelCount, properties.getMinChannelCount())
@@ -251,7 +255,7 @@ public class YoutubeCategoryChannelJobConfig {
     @Bean
     public ItemWriter<CategoryChannelDiscovery> youtubeChannelDiscoveryWriter() {
         return chunk -> {
-            var summary = service.writeDiscoveredChannels(new ArrayList<>(chunk.getItems()));
+            var summary = channelDiscoveryService.writeDiscoveredChannels(new ArrayList<>(chunk.getItems()));
             YoutubeBatchStepExecutionContext.addLong(
                     YoutubeBatchStepExecutionContext.CHANNEL_DISCOVERY_CATEGORY_COUNT,
                     summary.categoryCount()
@@ -287,7 +291,7 @@ public class YoutubeCategoryChannelJobConfig {
             @Value("#{jobParameters['recentDays']}") Long recentDays
     ) {
         return chunk -> {
-            var summary = service.refreshChannelMetrics(
+            var summary = channelMetricsService.refreshChannelMetrics(
                     new ArrayList<>(chunk.getItems()),
                     resolveIntJobParameter(recentDays, properties.getRecentDays())
             );
