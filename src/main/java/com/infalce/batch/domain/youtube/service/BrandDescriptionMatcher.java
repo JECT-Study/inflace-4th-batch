@@ -24,6 +24,14 @@ public class BrandDescriptionMatcher {
         return loadIndex().match(description);
     }
 
+    public Optional<BrandMatch> matchBrandName(String brandName) {
+        if (!StringUtils.hasText(brandName)) {
+            return Optional.empty();
+        }
+        return loadIndex().match(brandName).stream()
+                .max(Comparator.comparingInt(match -> match.matchedAlias().length()));
+    }
+
     public boolean hasAliasesConfigured() {
         return !loadIndex().isEmpty();
     }
@@ -70,20 +78,25 @@ public class BrandDescriptionMatcher {
                     continue;
                 }
 
-                String normalizedAlias = normalize(alias.getAlias());
-                if (!StringUtils.hasText(normalizedAlias) || shouldSkipAlias(normalizedAlias)) {
-                    continue;
-                }
-
-                TrieNode node = root;
-                for (char ch : normalizedAlias.toCharArray()) {
-                    node = node.children.computeIfAbsent(ch, key -> new TrieNode());
-                }
-                node.matches.add(new AliasMatch(alias.getBrand(), alias.getAlias(), normalizedAlias));
-                added = true;
+                added |= addAlias(root, alias.getBrand(), alias.getAlias());
+                added |= addAlias(root, alias.getBrand(), alias.getBrand().getName());
             }
 
             return new BrandAliasIndex(root, !added);
+        }
+
+        private static boolean addAlias(TrieNode root, Brand brand, String alias) {
+            String normalizedAlias = normalize(alias);
+            if (!StringUtils.hasText(normalizedAlias) || shouldSkipAlias(normalizedAlias)) {
+                return false;
+            }
+
+            TrieNode node = root;
+            for (char ch : normalizedAlias.toCharArray()) {
+                node = node.children.computeIfAbsent(ch, key -> new TrieNode());
+            }
+            node.matches.add(new AliasMatch(brand, alias, normalizedAlias));
+            return true;
         }
 
         List<BrandMatch> match(String description) {
