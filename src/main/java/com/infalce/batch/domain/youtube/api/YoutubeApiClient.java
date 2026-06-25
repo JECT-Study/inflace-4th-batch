@@ -24,10 +24,12 @@ public class YoutubeApiClient {
     private final YoutubeBatchProperties properties;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
+    private final List<String> apiKeys;
 
     public YoutubeApiClient(YoutubeBatchProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.apiKeys = resolveApiKeys();
         this.restClient = RestClient.builder()
                 .baseUrl(properties.getBaseUrl())
                 .build();
@@ -213,12 +215,49 @@ public class YoutubeApiClient {
     }
 
     private JsonNode get(String resource, Map<String, String> params) {
-        if (!StringUtils.hasText(properties.getApiKey())) {
+        if (apiKeys.isEmpty()) {
             throw new IllegalStateException("youtube.batch.api-key or env YT_API_KEY is required");
         }
 
+        try {
+            return request(resource, params, apiKeys.get(0));
+        } catch (YoutubeApiException e) {
+            if (!e.isQuotaExceeded() || apiKeys.size() == 1) {
+                throw e;
+            }
+            log.warn(
+                    "youtube api primary key quota exceeded. retrying with fallback key. resource={} nextKeyIndex={}",
+                    resource,
+                    1
+            );
+        }
+
+        for (int index = 1; index < apiKeys.size(); index++) {
+            try {
+                return request(resource, params, apiKeys.get(index));
+            } catch (YoutubeApiException e) {
+                if (!e.isQuotaExceeded()) {
+                    throw e;
+                }
+
+                if (index == apiKeys.size() - 1) {
+                    throw e;
+                }
+                log.warn(
+                        "youtube api fallback key quota exceeded. retrying with next fallback key. resource={} keyIndex={} nextKeyIndex={}",
+                        resource,
+                        index,
+                        index + 1
+                );
+            }
+        }
+
+        throw new IllegalStateException("YouTube API request failed before using fallback keys. resource=" + resource);
+    }
+
+    private JsonNode request(String resource, Map<String, String> params, String apiKey) {
         Map<String, String> requestParams = new java.util.LinkedHashMap<>(params);
-        requestParams.put("key", properties.getApiKey());
+        requestParams.put("key", apiKey);
 
         try {
             String body = restClient.get()
@@ -243,6 +282,26 @@ public class YoutubeApiClient {
                     "YouTube API " + resource + " request failed. params=" + sanitizeParams(requestParams),
                     e
             );
+        }
+    }
+
+    private List<String> resolveApiKeys() {
+        List<String> apiKeys = new ArrayList<>();
+        addApiKey(apiKeys, properties.getApiKey());
+        for (String apiKey : properties.getFallbackApiKeys()) {
+            addApiKey(apiKeys, apiKey);
+        }
+        return apiKeys;
+    }
+
+    private void addApiKey(List<String> apiKeys, String apiKey) {
+        if (!StringUtils.hasText(apiKey)) {
+            return;
+        }
+
+        String trimmedApiKey = apiKey.trim();
+        if (!apiKeys.contains(trimmedApiKey)) {
+            apiKeys.add(trimmedApiKey);
         }
     }
 
