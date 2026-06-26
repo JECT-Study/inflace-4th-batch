@@ -3,6 +3,8 @@ spring:
     default: local
   application:
     name: inflace-batch
+  main:
+    web-application-type: none
   batch:
     job:
       enabled: false
