@@ -1,6 +1,5 @@
 package com.infalce.batch.entity.brand;
 
-import com.infalce.batch.entity.global.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -19,4 +18,14 @@ public class Brand {
 
     @Column(name = "name", nullable = false)
     private String name;
+
+    @Column(name = "ai_generated", nullable = false)
+    private boolean aiGenerated;
+
+    public static Brand of(String name, boolean aiGenerated) {
+        Brand brand = new Brand();
+        brand.name = name;
+        brand.aiGenerated = aiGenerated;
+        return brand;
+    }
 }
