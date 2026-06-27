@@ -68,7 +68,7 @@ public class YoutubeChannelBrandService {
                     key -> new LinkedHashMap<>()
             );
 
-            Optional<BrandDescriptionMatcher.BrandMatch> aiMatch = extractAiBrand(new BrandAiExtractor.BrandAiVideo(
+            Optional<ResolvedBrandMatch> aiMatch = extractAiBrand(new BrandAiExtractor.BrandAiVideo(
                             prepared.youtubeVideoId(),
                             item.title(),
                             item.description(),
@@ -76,12 +76,12 @@ public class YoutubeChannelBrandService {
                     ))
                     .flatMap(this::resolveAiBrand);
             if (aiMatch.isPresent()) {
-                BrandDescriptionMatcher.BrandMatch match = aiMatch.get();
+                ResolvedBrandMatch match = aiMatch.get();
                 channelMatches.put(match.brand().getId(), new ChannelBrandMatchSource(
                         match.brand(),
                         match.matchedAlias(),
                         prepared.youtubeVideoId(),
-                        true
+                        match.aiGenerated()
                 ));
                 continue;
             }
@@ -163,7 +163,7 @@ public class YoutubeChannelBrandService {
         }
     }
 
-    private Optional<BrandDescriptionMatcher.BrandMatch> resolveAiBrand(String rawBrandName) {
+    private Optional<ResolvedBrandMatch> resolveAiBrand(String rawBrandName) {
         String brandName = normalizeAiBrandName(rawBrandName);
         if (!StringUtils.hasText(brandName)) {
             return Optional.empty();
@@ -171,18 +171,19 @@ public class YoutubeChannelBrandService {
 
         Optional<BrandDescriptionMatcher.BrandMatch> indexedMatch = brandDescriptionMatcher.matchBrandName(brandName);
         if (indexedMatch.isPresent()) {
-            return indexedMatch;
+            BrandDescriptionMatcher.BrandMatch match = indexedMatch.get();
+            return Optional.of(new ResolvedBrandMatch(match.brand(), match.matchedAlias(), false));
         }
 
         Optional<Brand> existingBrand = brandRepository.findByNameLike(brandName)
                 .stream()
                 .findFirst();
         if (existingBrand.isPresent()) {
-            return Optional.of(new BrandDescriptionMatcher.BrandMatch(existingBrand.get(), existingBrand.get().getName()));
+            return Optional.of(new ResolvedBrandMatch(existingBrand.get(), existingBrand.get().getName(), false));
         }
 
         Brand newBrand = brandRepository.save(Brand.of(brandName, true));
-        return Optional.of(new BrandDescriptionMatcher.BrandMatch(newBrand, brandName));
+        return Optional.of(new ResolvedBrandMatch(newBrand, brandName, true));
     }
 
     private String normalizeAiBrandName(String rawBrandName) {
@@ -201,6 +202,13 @@ public class YoutubeChannelBrandService {
 
     private String channelBrandKey(Long channelId, Long brandId) {
         return channelId + "::" + brandId;
+    }
+
+    private record ResolvedBrandMatch(
+            Brand brand,
+            String matchedAlias,
+            boolean aiGenerated
+    ) {
     }
 
     private record ChannelBrandMatchSource(
