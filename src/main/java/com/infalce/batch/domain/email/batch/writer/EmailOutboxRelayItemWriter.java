@@ -25,8 +25,11 @@ public class EmailOutboxRelayItemWriter implements ItemWriter<EmailOutboxEvent> 
                 .map(this::prepareSendTask)
                 .toList();
 
-        List<EmailSendResult> results = tasks.stream()
+        List<CompletableFuture<EmailSendResult>> futures = tasks.stream()
                 .map(task -> CompletableFuture.supplyAsync(() -> sendEmail(task), executor))
+                .toList();
+
+        List<EmailSendResult> results = futures.stream()
                 .map(CompletableFuture::join)
                 .toList();
 
